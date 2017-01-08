@@ -2,7 +2,13 @@ package com.stucom.basketball.web.rest;
 
 import com.codahale.metrics.annotation.Timed;
 import com.stucom.basketball.domain.FavouritePlayer;
+import com.stucom.basketball.domain.Player;
+import com.stucom.basketball.domain.User;
+import com.stucom.basketball.repository.FavouritePlayerRepository;
+import com.stucom.basketball.repository.UserRepository;
+import com.stucom.basketball.security.SecurityUtils;
 import com.stucom.basketball.service.FavouritePlayerService;
+import com.stucom.basketball.service.dto.PlayerDTO;
 import com.stucom.basketball.web.rest.util.HeaderUtil;
 import com.stucom.basketball.web.rest.util.PaginationUtil;
 
@@ -19,6 +25,8 @@ import org.springframework.web.bind.annotation.*;
 import javax.inject.Inject;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,10 +38,15 @@ import java.util.Optional;
 public class FavouritePlayerResource {
 
     private final Logger log = LoggerFactory.getLogger(FavouritePlayerResource.class);
-        
+
     @Inject
     private FavouritePlayerService favouritePlayerService;
 
+    @Inject
+    private UserRepository userRepository;
+
+    @Inject
+    private FavouritePlayerRepository favouritePlayerRepository;
     /**
      * POST  /favourite-players : Create a new favouritePlayer.
      *
@@ -48,6 +61,16 @@ public class FavouritePlayerResource {
         if (favouritePlayer.getId() != null) {
             return ResponseEntity.badRequest().headers(HeaderUtil.createFailureAlert("favouritePlayer", "idexists", "A new favouritePlayer cannot already have an ID")).body(null);
         }
+
+        User user = userRepository.findOneByLogin(SecurityUtils.getCurrentUserLogin()).get();
+        ZonedDateTime now = ZonedDateTime.now();
+
+        // TODO:  Comprobar que el usuario que ha hecho la peticion no ha seleccionado previamente al jugador favorito.
+        // Evitar duplicados.
+
+        favouritePlayer.setUser(user);
+        favouritePlayer.setFavouriteDateTime(now);
+
         FavouritePlayer result = favouritePlayerService.save(favouritePlayer);
         return ResponseEntity.created(new URI("/api/favourite-players/" + result.getId()))
             .headers(HeaderUtil.createEntityCreationAlert("favouritePlayer", result.getId().toString()))
@@ -91,6 +114,37 @@ public class FavouritePlayerResource {
         Page<FavouritePlayer> page = favouritePlayerService.findAll(pageable);
         HttpHeaders headers = PaginationUtil.generatePaginationHttpHeaders(page, "/api/favourite-players");
         return new ResponseEntity<>(page.getContent(), headers, HttpStatus.OK);
+    }
+
+    /**
+     * GET  /favourite-players : get all the favouritePlayers.
+     *
+     * @return the ResponseEntity with status 200 (OK) and the list of favouritePlayers in body
+     * @throws URISyntaxException if there is an error to generate the pagination HTTP headers
+     */
+    @GetMapping("/top-players")
+    @Timed
+    public ResponseEntity<List<PlayerDTO>> getTopPlayers()
+        throws URISyntaxException {
+
+        log.debug("REST request to get TopPlayers");
+
+        List<Object[]> topPlayers = favouritePlayerRepository.findTopPlayers();
+
+        List<PlayerDTO> result = new ArrayList<>();
+
+        topPlayers.forEach(
+            topPlayer -> {
+                PlayerDTO p = new PlayerDTO();
+                p.setPlayer((Player) topPlayer[0]);
+                p.setNumFavs((Long) topPlayer[1]);
+
+                result.add(p);
+            }
+
+        );
+
+         return new ResponseEntity<>(result, HttpStatus.OK);
     }
 
     /**

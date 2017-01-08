@@ -15,4 +15,8 @@ public interface FavouritePlayerRepository extends JpaRepository<FavouritePlayer
     @Query("select favouritePlayer from FavouritePlayer favouritePlayer where favouritePlayer.user.login = ?#{principal.username}")
     List<FavouritePlayer> findByUserIsCurrentUser();
 
+    @Query("select favouritePlayer.player, count(favouritePlayer) from FavouritePlayer favouritePlayer " +
+           "group by favouritePlayer.player")
+    List<Object[]> findTopPlayers();
+
 }
